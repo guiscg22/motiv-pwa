@@ -1,39 +1,44 @@
 import { NextResponse } from "next/server";
 export const runtime = "edge";
 
-type Point = { lat: number; lng: number; ts: number };
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
+type Msg = { role: "system" | "user" | "assistant"; content: string };
 
 export async function POST(req: Request) {
   try {
-    const { points } = (await req.json()) as { points: Point[] };
-    if (!Array.isArray(points) || points.length === 0) {
-      return NextResponse.json({ elevations: [] });
+    const body = await req.json();
+    const messages: Msg[] = Array.isArray(body?.messages) ? body.messages : [];
+    const model = body?.model || "deepseek-chat";
+    const temperature = typeof body?.temperature === "number" ? body.temperature : 0.2;
+
+    const system: Msg = {
+      role: "system",
+      content: [
+        "Você é um treinador de corrida de ELITE (2025).",
+        "Fale em PT-BR, direto, com números. Segurança em 1º lugar.",
+        "Use os dados do snapshot (objetivo, distância, pace atual/médio, splits, elevação, terreno).",
+        "Diga O QUE fazer AGORA: ajuste de ritmo (± s/km), cadência, respiração, postura, hidratação, estratégia de subida/descida.",
+        "Se objetivo for por TEMPO, gerencie déficit/sobra. Converta pace↔km/h quando útil.",
+        "Responda curto (1–2 frases), tom confiante."
+      ].join(" "),
+    };
+
+    const payload = { model, temperature, messages: [system, ...messages] };
+
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) return NextResponse.json({ error: "DEEPSEEK_API_KEY ausente" }, { status: 500 });
+
+    const r = await fetch("https://api.deepseek.com/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!r.ok) {
+      const t = await r.text().catch(() => "");
+      return NextResponse.json({ error: `Upstream ${r.status}: ${t}` }, { status: 500 });
     }
-
-    const chunks = chunk(points, 90);
-    const results: number[] = [];
-
-    for (const part of chunks) {
-      const query = part.map(p => `${p.lat},${p.lng}`).join("|");
-      const url = `https://api.open-elevation.com/api/v1/lookup?locations=${encodeURIComponent(query)}`;
-      const r = await fetch(url, { cache: "no-store" });
-      if (!r.ok) {
-        for (let i = 0; i < part.length; i++) results.push(undefined as any);
-        continue;
-      }
-      const data: any = await r.json();
-      const arr = Array.isArray(data?.results) ? data.results.map((x: any) => x.elevation) : [];
-      results.push(...arr);
-      while (arr.length < part.length) results.push(undefined as any);
-    }
-
-    return NextResponse.json({ elevations: results.slice(0, points.length) });
+    const json = await r.json();
+    return NextResponse.json(json);
   } catch (e: any) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
