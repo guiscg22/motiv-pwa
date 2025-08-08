@@ -1,9 +1,10 @@
-
 "use client";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Polyline, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
 import { motion } from "framer-motion";
+
+type ChatMessage = { role: "user" | "assistant"; content: string; ts?: number };
 
 const km = (m:number) => m / 1000;
 const pad = (n:number) => String(n).padStart(2, "0");
@@ -193,7 +194,7 @@ export default function CoachApp(){
     const blob = new Blob([gpx], { type: "application/gpx+xml" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `${s.name.replace(/\\s+/g,'_')}.gpx`; a.click(); URL.revokeObjectURL(url);
+    a.href = url; a.download = `${s.name.replace(/\s+/g,'_')}.gpx`; a.click(); URL.revokeObjectURL(url);
   };
 
   const targetPaceStr = `${Math.floor(targetPace/60)}:${pad(targetPace%60)}`;
@@ -314,13 +315,13 @@ export default function CoachApp(){
 }
 
 function CoachChat(){
-  const [chat, setChat] = useLocalState<any[]>("motiv.chat", []);
+  const [chat, setChat] = useLocalState<ChatMessage[]>("motiv.chat", []);
   const [msg, setMsg] = useState<string>("");
 
   const sendMsg = async () => {
     if (!msg.trim()) return;
-    const userMessage = { role: "user", content: msg, ts: Date.now() };
-    setChat(c=>[...c, userMessage]);
+    const userMessage: ChatMessage = { role: "user", content: msg, ts: Date.now() };
+    setChat((c: ChatMessage[]) => [...c, userMessage]);
     setMsg("");
     try {
       const res = await fetch("/api/chat", {
@@ -338,16 +339,16 @@ function CoachChat(){
       });
       const data = await res.json();
       const text = data?.choices?.[0]?.message?.content || "(sem resposta)";
-      setChat(c=>[...c, { role: "assistant", content: text, ts: Date.now() }]);
+      setChat((c: ChatMessage[]) => [...c, { role: "assistant", content: text, ts: Date.now() }]);
     } catch (e:any) {
-      setChat(c=>[...c, { role: "assistant", content: `Erro: ${e.message||e}` }]);
+      setChat((c: ChatMessage[]) => [...c, { role: "assistant", content: `Erro: ${e.message||e}` }]);
     }
   };
 
   return (
     <div className="card">
       <div style={{height:360, overflow:'auto', background:'rgba(0,0,0,.25)', borderRadius:10, padding:10}}>
-        {chat.map((m:any, i:number)=>(
+        {chat.map((m, i)=>(
           <div key={i} style={{marginBottom:8, textAlign: m.role==='user'?'right':'left'}}>
             <div style={{display:'inline-block', maxWidth:'85%', whiteSpace:'pre-wrap', borderRadius:10, padding:'8px 10px', background: m.role==='user'?'#0E4DFFAA':'rgba(255,255,255,0.08)'}}>
               {m.content}
