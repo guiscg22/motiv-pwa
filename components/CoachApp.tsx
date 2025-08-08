@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Polyline, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
-import { motion } from "framer-motion";
+// import { motion } from "framer-motion"; // opcional
 
 type ChatMessage = { role: "user" | "assistant"; content: string; ts?: number };
 
@@ -36,11 +36,22 @@ const haversine = (a:any, b:any) => {
   return R * c;
 };
 
-function useLocalState<T>(key:string, initial:T): [T, (v:T)=>void] {
+// ✔ Setter compatível com SetStateAction<T>
+function useLocalState<T>(
+  key: string,
+  initial: T
+): [T, React.Dispatch<React.SetStateAction<T>>] {
   const [state, setState] = useState<T>(() => {
-    try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : initial; } catch { return initial; }
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : initial;
+    } catch {
+      return initial;
+    }
   });
-  useEffect(() => { try { localStorage.setItem(key, JSON.stringify(state)); } catch {} }, [key, state]);
+  useEffect(() => {
+    try { localStorage.setItem(key, JSON.stringify(state)); } catch {}
+  }, [key, state]);
   return [state, setState];
 }
 
